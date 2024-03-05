@@ -15,17 +15,12 @@ from decimal import Decimal
 from unittest import TestCase
 from urllib.parse import quote_plus
 
-from flask import abort, request
 
 from service import app
 from service.common import status
-from service.models import db, init_db, Product, Category
-from service.routes import check_content_type
+from service.models import db, init_db, Product
 from tests.factories import ProductFactory
 
-# Disable all but critical errors during normal test run
-# uncomment for debugging failing tests
-# logging.disable(logging.CRITICAL)
 
 # DATABASE_URI = os.getenv('DATABASE_URI', 'sqlite:///../db/test.db')
 DATABASE_URI = os.getenv(
@@ -108,7 +103,7 @@ class TestProductRoutes(TestCase):
         response = self.client.post(BASE_URL, json=test_product.serialize())
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        # Make sure the location header is set
+        # Make sure location header is set
         location = response.headers.get("Location", None)
         self.assertIsNotNone(location)
 
@@ -149,52 +144,24 @@ class TestProductRoutes(TestCase):
         self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
     def test_create_product_wrong_content_type(self):
-        """It should not Create a Product with the wrong Content-Type"""
+        """It should not Create a Product with wrong Content-Type"""
         response = self.client.post(BASE_URL, data={}, content_type="plain/text")
         self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
-    ######################################################################
-    # Utility functions
-    ######################################################################
-
-    def get_product_count(self):
-        """save the current number of products"""
-        response = self.client.get(BASE_URL)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.get_json()
-        # logging.debug("data = %s", data)
-        return len(data)
+    #
+    # ADD YOUR TEST CASES HERE
+    #
 
     def test_get_product(self):
-        """It should Get a single Product"""
-        # get the id of a product
+        """ It should get a single product"""
         test_product = self._create_products(1)[0]
         response = self.client.get(f"{BASE_URL}/{test_product.id}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
         self.assertEqual(data["name"], test_product.name)
 
-    ######################################################################
-    # READ A PRODUCT
-    ######################################################################
-    @app.route("/products/<int:product_id>", methods=["GET"])
-    def get_products(product_id):
-        """
-        Retrieve a single Product
-
-        This endpoint will return a Product based on its id
-        """
-        app.logger.info("Request to Retrieve a product with id [%s]", product_id)
-
-        product = Product.find(product_id)
-        if not product:
-            abort(status.HTTP_404_NOT_FOUND, f"Product with id '{product_id}' was not found.")
-
-        app.logger.info("Returning product: %s", product.name)
-        return product.serialize(), status.HTTP_200_OK
-
     def test_get_product_not_found(self):
-        """It should not Get a Product that's not found"""
+        """ It should not get a product thats not found """
         response = self.client.get(f"{BASE_URL}/0")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         data = response.get_json()
@@ -215,28 +182,6 @@ class TestProductRoutes(TestCase):
         updated_product = response.get_json()
         self.assertEqual(updated_product["description"], "unknown")
 
-    ######################################################################
-    # UPDATE AN EXISTING PRODUCT
-    ######################################################################
-    @app.route("/products/<int:product_id>", methods=["PUT"])
-    def update_products(product_id):
-        """
-        Update a Product
-
-        This endpoint will update a Product based on the body that is posted
-        """
-        app.logger.info("Request to Update a product with id [%s]", product_id)
-        check_content_type("application/json")
-
-        product = Product.find(product_id)
-        if not product:
-            abort(status.HTTP_404_NOT_FOUND, f"Product with id '{product_id}' was not found.")
-
-        product.deserialize(request.get_json())
-        product.id = product_id
-        product.update()
-        return product.serialize(), status.HTTP_200_OK
-
     def test_delete_product(self):
         """It should Delete a Product"""
         products = self._create_products(5)
@@ -251,45 +196,13 @@ class TestProductRoutes(TestCase):
         new_count = self.get_product_count()
         self.assertEqual(new_count, product_count - 1)
 
-    ######################################################################
-    # DELETE A PRODUCT
-    ######################################################################
-    @app.route("/products/<int:product_id>", methods=["DELETE"])
-    def delete_products(product_id):
-        """
-        Delete a Product
-
-        This endpoint will delete a Product based on id specified in the path
-        """
-        app.logger.info("Request to Delete a product with id [%s]", product_id)
-
-        product = Product.find(product_id)
-        if product:
-            product.delete()
-
-        return "", status.HTTP_204_NO_CONTENT
-
     def test_get_product_list(self):
-        """It should Get a list of Products"""
+        """ It should get a list of products """
         self._create_products(5)
         response = self.client.get(BASE_URL)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
         self.assertEqual(len(data), 5)
-
-    ######################################################################
-    # LIST PRODUCTS
-    ######################################################################
-    @app.route("/products", methods=["GET"])
-    def list_products(self):
-        """Returns a list of Products"""
-        app.logger.info("Request to list Products...")
-
-        products = Product.all()
-
-        results = [product.serialize() for product in products]
-        app.logger.info("[%s] Products returned", len(results))
-        return results, status.HTTP_200_OK
 
     def test_query_by_name(self):
         """It should Query Products by name"""
@@ -305,28 +218,6 @@ class TestProductRoutes(TestCase):
         # check the data just to be sure
         for product in data:
             self.assertEqual(product["name"], test_name)
-
-    ######################################################################
-    # LIST PRODUCTS
-    ######################################################################
-    @app.route("/products", methods=["GET"])
-    def list_products(self):
-        """Returns a list of Products"""
-        app.logger.info("Request to list Products...")
-
-        products = []
-        name = request.args.get("name")
-
-        if name:
-            app.logger.info("Find by name: %s", name)
-            products = Product.find_by_name(name)
-        else:
-            app.logger.info("Find all")
-            products = Product.all()
-
-        results = [product.serialize() for product in products]
-        app.logger.info("[%s] Products returned", len(results))
-        return results, status.HTTP_200_OK
 
     def test_query_by_category(self):
         """It should Query Products by category"""
@@ -345,34 +236,6 @@ class TestProductRoutes(TestCase):
         for product in data:
             self.assertEqual(product["category"], category.name)
 
-    ######################################################################
-    # LIST PRODUCTS
-    ######################################################################
-    @app.route("/products", methods=["GET"])
-    def list_products(self):
-        """Returns a list of Products"""
-        app.logger.info("Request to list Products...")
-
-        products = []
-        name = request.args.get("name")
-        category = request.args.get("category")
-
-        if name:
-            app.logger.info("Find by name: %s", name)
-            products = Product.find_by_name(name)
-        elif category:
-            app.logger.info("Find by category: %s", category)
-            # create enum from string
-            category_value = getattr(Category, category.upper())
-            products = Product.find_by_category(category_value)
-        else:
-            app.logger.info("Find all")
-            products = Product.all()
-
-        results = [product.serialize() for product in products]
-        app.logger.info("[%s] Products returned", len(results))
-        return results, status.HTTP_200_OK
-
     def test_query_by_availability(self):
         """It should Query Products by availability"""
         products = self._create_products(10)
@@ -390,35 +253,13 @@ class TestProductRoutes(TestCase):
             self.assertEqual(product["available"], True)
 
     ######################################################################
-    # LIST PRODUCTS
+    # Utility functions
     ######################################################################
-    @app.route("/products", methods=["GET"])
-    def list_products(self):
-        """Returns a list of Products"""
-        app.logger.info("Request to list Products...")
 
-        products = []
-        name = request.args.get("name")
-        category = request.args.get("category")
-        available = request.args.get("available")
-
-        if name:
-            app.logger.info("Find by name: %s", name)
-            products = Product.find_by_name(name)
-        elif category:
-            app.logger.info("Find by category: %s", category)
-            # create enum from string
-            category_value = getattr(Category, category.upper())
-            products = Product.find_by_category(category_value)
-        elif available:
-            app.logger.info("Find by available: %s", available)
-            # create bool from string
-            available_value = available.lower() in ["true", "yes", "1"]
-            products = Product.find_by_availability(available_value)
-        else:
-            app.logger.info("Find all")
-            products = Product.all()
-
-        results = [product.serialize() for product in products]
-        app.logger.info("[%s] Products returned", len(results))
-        return results, status.HTTP_200_OK
+    def get_product_count(self):
+        """save the current number of products"""
+        response = self.client.get(BASE_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        # logging.debug("data = %s", data)
+        return len(data)
